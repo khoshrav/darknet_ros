@@ -126,6 +126,9 @@ void YoloObjectDetector::init() {
   std::string detectionImageTopicName;
   int detectionImageQueueSize;
   bool detectionImageLatch;
+  std::string headStateTopicName;
+  std::string pointCloudTopicName;
+  std::string worldObjectsTopicName;
 
   nodeHandle_.param("subscribers/camera_reading/topic", cameraTopicName, std::string("/camera/image_raw"));
   nodeHandle_.param("subscribers/camera_reading/queue_size", cameraQueueSize, 1);
@@ -146,6 +149,18 @@ void YoloObjectDetector::init() {
       nodeHandle_.advertise<darknet_ros_msgs::BoundingBoxes>(boundingBoxesTopicName, boundingBoxesQueueSize, boundingBoxesLatch);
   detectionImagePublisher_ =
       nodeHandle_.advertise<sensor_msgs::Image>(detectionImageTopicName, detectionImageQueueSize, detectionImageLatch);
+  nodeHandle_.param("subscribers/head_state/topic", headStateTopicName,
+                    std::string("/uBot_head/joint_states"));
+  nodeHandle_.param("subscribers/point_cloud/topic", pointCloudTopicName,
+                    std::string("/camera/points"));
+  nodeHandle_.param("publishers/world_objects/topic", worldObjectsTopicName,
+                    std::string("/yolo_ros/world_objects"));
+  jointStateSubscriber_ = nodeHandle_.subscribe<sensor_msgs::JointState>(headStateTopicName, 1,
+                                               &YoloObjectDetector::headStateCallback, this);
+  pointCloudSubscriber_ = nodeHandle_.subscribe<sensor_msgs::PointCloud2>(pointCloudTopicName, 1,
+                                                &YoloObjectDetector::pointsCallback, this);
+  worldObjectPublisher_ = nodeHandle_.advertise<darknet_ros_msgs::WorldObjects>(worldObjectsTopicName,
+                                                                           1);
 
   // Action servers.
   std::string checkForObjectsActionName;
@@ -155,6 +170,20 @@ void YoloObjectDetector::init() {
   checkForObjectsActionServer_->registerPreemptCallback(boost::bind(&YoloObjectDetector::checkForObjectsActionPreemptCB, this));
   checkForObjectsActionServer_->start();
 }
+
+void YoloObjectDetector::headStateCallback(const sensor_msgs::JointState::ConstPtr& msg)
+{
+  for(size_t MSG_INDEX = 0; MSG_INDEX < msg->position.size(); MSG_INDEX++)
+  {
+    head_pos_[2- MSG_INDEX] = msg->position[MSG_INDEX];
+  }
+}
+
+void YoloObjectDetector::pointsCallback(const sensor_msgs::PointCloud2ConstPtr& msg)
+{
+   pcl::fromROSMsg(*msg, point_cloud_);
+}
+
 
 void YoloObjectDetector::cameraCallback(const sensor_msgs::ImageConstPtr& msg) {
   ROS_DEBUG("[YoloObjectDetector] USB image received.");
@@ -578,6 +607,43 @@ void* YoloObjectDetector::publishInThread() {
           boundingBox.xmax = xmax;
           boundingBox.ymax = ymax;
           boundingBoxesResults_.bounding_boxes.push_back(boundingBox);
+          darknet_ros_msgs::WorldObject obj;
+          obj.Class = boundingBox.Class;
+          obj.prob = boundingBox.probability;
+          obj.frame = "/head_base_link";
+          double x_center = static_cast<double>(xmin) + (static_cast<double>(xmax-xmin)/2);
+          double y_center = static_cast<double>(ymin) + (static_cast<double>(ymax-ymin)/2);
+
+          pcl::PointXYZ point = point_cloud_.at(x_center, y_center);
+          try
+          {
+            geometry_msgs::PointStamped point_src;
+            point_src.header.frame_id = "kinect_openni_frame";
+
+            //we'll just use the most recent transform available for our simple example
+            point_src.header.stamp = ros::Time(0);
+
+            //just an arbitrary point in space
+            point_src.point.x = point.x;
+            point_src.point.y = point.y;
+            point_src.point.z = point.z;
+            geometry_msgs::PointStamped point_des;
+            tf_listener_.waitForTransform("world",
+               point_src.header.frame_id,
+               point_src.header.stamp,
+               ros::Duration(3.0));
+            tf_listener_.transformPoint("world", point_src, point_des);
+            obj.x = point_des.point.x;
+            obj.y = point_des.point.y;
+            obj.z = point_des.point.z;
+            obj.upper_tilt = head_pos_[0];
+            obj.pan = head_pos_[1];
+            obj.lower_tilt = head_pos_[2];
+            worldObjects_.objects.push_back(obj);
+          }
+          catch(tf::TransformException& ex){
+            ROS_ERROR("Received an exception trying to transform a point from \"kinect_openni_frame\" to \"head_base_link\": %s", ex.what());
+          }
         }
       }
     }
@@ -585,6 +651,7 @@ void* YoloObjectDetector::publishInThread() {
     boundingBoxesResults_.header.frame_id = "detection";
     boundingBoxesResults_.image_header = headerBuff_[(buffIndex_ + 1) % 3];
     boundingBoxesPublisher_.publish(boundingBoxesResults_);
+    worldObjectPublisher_.publish(worldObjects_);
   } else {
     darknet_ros_msgs::ObjectCount msg;
     msg.header.stamp = ros::Time::now();
@@ -600,6 +667,7 @@ void* YoloObjectDetector::publishInThread() {
     checkForObjectsActionServer_->setSucceeded(objectsActionResult, "Send bounding boxes.");
   }
   boundingBoxesResults_.bounding_boxes.clear();
+  worldObjects_.objects.clear();
   for (int i = 0; i < numClasses_; i++) {
     rosBoxes_[i].clear();
     rosBoxCounter_[i] = 0;
@@ -607,5 +675,6 @@ void* YoloObjectDetector::publishInThread() {
 
   return 0;
 }
+
 
 } /* namespace darknet_ros*/

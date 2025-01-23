@@ -1,9 +1,14 @@
 subscribers:
 
   camera_reading:
-    topic: /camera/rgb/image_raw
+    topic: /asus/rgb/image_raw
     queue_size: 1
 
+  head_state:
+    topic: /uBot_head/joint_states
+
+  point_cloud:
+    topic: /asus/depth/points
 actions:
 
   camera_reading:

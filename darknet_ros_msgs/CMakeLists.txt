@@ -15,6 +15,8 @@ find_package(catkin REQUIRED
 
 add_message_files(
   FILES
+    WorldObject.msg
+    WorldObjects.msg
     BoundingBox.msg
     BoundingBoxes.msg
     ObjectCount.msg

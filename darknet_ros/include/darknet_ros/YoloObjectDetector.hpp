@@ -37,6 +37,8 @@
 #include <darknet_ros_msgs/BoundingBoxes.h>
 #include <darknet_ros_msgs/CheckForObjectsAction.h>
 #include <darknet_ros_msgs/ObjectCount.h>
+#include <darknet_ros_msgs/WorldObject.h>
+#include <darknet_ros_msgs/WorldObjects.h>
 
 // Darknet.
 #ifdef GPU
@@ -44,6 +46,19 @@
 #include "cuda_runtime.h"
 #include "curand.h"
 #endif
+
+// include pcl stuff
+
+#include <pcl/point_cloud.h>
+#include <pcl/point_types.h>
+#include <pcl_ros/point_cloud.h>
+#include <pcl/common/transforms.h>
+#include <pcl/common/eigen.h>
+#include <pcl_conversions/pcl_conversions.h>
+#include <pcl/PCLPointCloud2.h>
+#include <pcl/conversions.h>
+#include <pcl_ros/transforms.h>
+#include <sensor_msgs/JointState.h>
 
 extern "C" {
 #include <sys/time.h>
@@ -107,6 +122,18 @@ class YoloObjectDetector {
   void cameraCallback(const sensor_msgs::ImageConstPtr& msg);
 
   /*!
+   * Callback of head state.
+   * @param[in] msg joint state pointer.
+   */
+  void headStateCallback(const sensor_msgs::JointState::ConstPtr& msg);
+
+  /*!
+   * Callback of pointcloud.
+   * @param[in] msg point cloud pointer.
+   */
+  void pointsCallback(const sensor_msgs::PointCloud2ConstPtr& msg);
+
+  /*!
    * Check for objects action goal callback.
    */
   void checkForObjectsActionGoalCB();
@@ -147,13 +174,18 @@ class YoloObjectDetector {
 
   //! ROS subscriber and publisher.
   image_transport::Subscriber imageSubscriber_;
+  ros::Subscriber jointStateSubscriber_;
+  ros::Subscriber pointCloudSubscriber_;
+
   ros::Publisher objectPublisher_;
   ros::Publisher boundingBoxesPublisher_;
+  ros::Publisher worldObjectPublisher_;
 
   //! Detected objects.
   std::vector<std::vector<RosBox_> > rosBoxes_;
   std::vector<int> rosBoxCounter_;
   darknet_ros_msgs::BoundingBoxes boundingBoxesResults_;
+  darknet_ros_msgs::WorldObjects worldObjects_;
 
   //! Camera related parameters.
   int frameWidth_;
@@ -242,6 +274,10 @@ class YoloObjectDetector {
   bool isNodeRunning(void);
 
   void* publishInThread();
+
+  double head_pos_[3];
+  pcl::PointCloud<pcl::PointXYZ> point_cloud_;
+  tf::TransformListener tf_listener_;
 };
 
 } /* namespace darknet_ros*/

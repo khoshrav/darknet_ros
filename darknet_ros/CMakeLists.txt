@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.5.1)
 project(darknet_ros)
 
 # Set c++11 cmake flags
-set(CMAKE_CXX_STANDARD 11)
+set(CMAKE_CXX_STANDARD 14)
 set(CMAKE_C_FLAGS "-Wall -Wno-unused-result -Wno-unknown-pragmas -Wno-unused-variable -Wfatal-errors -fPIC ${CMAKE_C_FLAGS}")
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
@@ -59,6 +59,11 @@ find_package(catkin REQUIRED
     darknet_ros_msgs
     image_transport
     nodelet
+    pcl_conversions
+    pcl_msgs
+    pcl_ros
+    tf
+    geometry_msgs
 )
 
 # Enable OPENCV in darknet
@@ -79,6 +84,11 @@ catkin_package(
     darknet_ros_msgs
     image_transport
     nodelet
+    pcl_conversions
+    pcl_msgs
+    pcl_ros
+    tf
+    geometry_msgs
   DEPENDS
     Boost
 )
@@ -89,6 +99,7 @@ include_directories(
   include
   ${Boost_INCLUDE_DIRS}
   ${catkin_INCLUDE_DIRS}
+  ${PCL_INCLUDE_DIRS}
 )
 
 set(PROJECT_LIB_FILES
@@ -155,6 +166,7 @@ if (CUDA_FOUND)
     cudart
     cublas
     curand
+    ${PCL_INCLUDE_DIRS}
   )
 
   cuda_add_executable(${PROJECT_NAME}

@@ -1,0 +1,9 @@
+string Class
+float32 prob
+float32 x
+float32 y
+float32 z
+string frame
+float32 upper_tilt
+float32 pan
+float32 lower_tilt
